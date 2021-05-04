@@ -47,12 +47,6 @@ public enum AzureBlobClientSideEncryptionMethod {
 
     @Override
     public String toString() {
-        /* final ToStringBuilder builder = new ToStringBuilder(this);
-        ToStringBuilder.setDefaultStyle(ToStringStyle.SHORT_PREFIX_STYLE);
-        builder.append("CSE Name", cseName);
-        builder.append("Description", description);
-        return builder.toString();*/
         return description;
-
     }
 }

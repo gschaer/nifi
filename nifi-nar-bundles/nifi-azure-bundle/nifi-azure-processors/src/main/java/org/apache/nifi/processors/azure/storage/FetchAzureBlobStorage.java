@@ -42,7 +42,7 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
-import org.apache.nifi.processors.azure.AbstractAzureBlobProcessor;
+import org.apache.nifi.processors.azure.AbstractAzureEncryptedBlobProcessor;
 import org.apache.nifi.processors.azure.storage.utils.AzureStorageUtils;
 
 import com.microsoft.azure.storage.StorageException;
@@ -57,7 +57,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
 @WritesAttributes({
     @WritesAttribute(attribute = "azure.length", description = "The length of the blob fetched")
 })
-public class FetchAzureBlobStorage extends AbstractAzureBlobProcessor {
+public class FetchAzureBlobStorage extends AbstractAzureEncryptedBlobProcessor {
 
     public static final PropertyDescriptor RANGE_START = new PropertyDescriptor.Builder()
             .name("range-start")

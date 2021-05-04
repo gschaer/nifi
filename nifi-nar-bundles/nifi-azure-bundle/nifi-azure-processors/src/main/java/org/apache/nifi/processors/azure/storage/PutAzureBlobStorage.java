@@ -38,7 +38,6 @@ import org.apache.nifi.annotation.behavior.WritesAttributes;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.SeeAlso;
 import org.apache.nifi.annotation.documentation.Tags;
-import org.apache.nifi.components.AllowableValue;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
@@ -46,7 +45,7 @@ import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
-import org.apache.nifi.processors.azure.AbstractAzureBlobProcessor;
+import org.apache.nifi.processors.azure.AbstractAzureEncryptedBlobProcessor;
 import org.apache.nifi.processors.azure.storage.utils.AzureStorageUtils;
 import org.apache.nifi.processors.azure.storage.utils.AzureBlobClientSideEncryptionMethod;
 
@@ -66,7 +65,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
         @WritesAttribute(attribute = "azure.etag", description = "Etag for the Azure blob"),
         @WritesAttribute(attribute = "azure.length", description = "Length of the blob"),
         @WritesAttribute(attribute = "azure.timestamp", description = "The timestamp in Azure for the blob")})
-public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
+public class PutAzureBlobStorage extends AbstractAzureEncryptedBlobProcessor {
 
     public static final PropertyDescriptor BLOB_NAME = new PropertyDescriptor.Builder()
             .name("blob")
@@ -90,42 +89,12 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
                   "will fail if the container does not exist.")
             .build();
 
-    public static final PropertyDescriptor CSE_KEY_TYPE = new PropertyDescriptor.Builder()
-            .name("cse-key-type")
-            .displayName("Client-Side Encryption key type")
-            .required(true)
-            .allowableValues(buildCseEncryptionMethodAllowableValues())
-            .defaultValue(AzureBlobClientSideEncryptionMethod.NONE.name())
-            .description("Specifies the key type to use for client-side encryption.")
-            .build();
-
-    public static final PropertyDescriptor CSE_SYMMETRIC_KEY_HEX = new PropertyDescriptor.Builder()
-            .name("cse-symmetric-key-hex")
-            .displayName("Symmetric Key (hexadecimal)")
-            .description("When using symmetric client-side encryption, this is the raw key, encoded in hexadecimal")
-            .required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .sensitive(true)
-            .build();
-
-    private static AllowableValue[] buildCseEncryptionMethodAllowableValues() {
-        final AzureBlobClientSideEncryptionMethod[] encryptionMethods = AzureBlobClientSideEncryptionMethod.values();
-        List<AllowableValue> allowableValues = new ArrayList<>(encryptionMethods.length);
-        for (AzureBlobClientSideEncryptionMethod em : encryptionMethods) {
-            allowableValues.add(new AllowableValue(em.name(), em.name(), em.toString()));
-        }
-
-        return allowableValues.toArray(new AllowableValue[0]);
-    }
-
     @Override
     public List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         List<PropertyDescriptor> properties = new ArrayList<>(super.getSupportedPropertyDescriptors());
         properties.remove(BLOB);
         properties.add(BLOB_NAME);
         properties.add(CREATE_CONTAINER);
-        properties.add(CSE_KEY_TYPE);
-        properties.add(CSE_SYMMETRIC_KEY_HEX);
         return properties;
     }
 
@@ -142,6 +111,11 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
         String blobPath = context.getProperty(BLOB_NAME).evaluateAttributeExpressions(flowFile).getValue();
 
         final boolean createContainer = context.getProperty(CREATE_CONTAINER).asBoolean();
+
+        final String cseKeyTypeValue = context.getProperty(CSE_KEY_TYPE).getValue();
+        final AzureBlobClientSideEncryptionMethod cseKeyType = AzureBlobClientSideEncryptionMethod.valueOf(cseKeyTypeValue);
+
+        final String cseSymmetricKeyHex = context.getProperty(CSE_SYMMETRIC_KEY_HEX).getValue();
 
         AtomicReference<Exception> storedException = new AtomicReference<>();
         try {
