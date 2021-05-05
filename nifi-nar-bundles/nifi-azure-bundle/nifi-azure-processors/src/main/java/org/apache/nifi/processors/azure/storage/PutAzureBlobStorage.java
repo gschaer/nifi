@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -39,13 +40,16 @@ import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.SeeAlso;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.ValidationContext;
+import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
-import org.apache.nifi.processors.azure.AbstractAzureEncryptedBlobProcessor;
+import org.apache.nifi.processors.azure.AbstractAzureBlobProcessor;
+import org.apache.nifi.processors.azure.storage.utils.AzureBlobClientSideEncryptionUtils;
 import org.apache.nifi.processors.azure.storage.utils.AzureStorageUtils;
 import org.apache.nifi.processors.azure.storage.utils.AzureBlobClientSideEncryptionMethod;
 
@@ -65,7 +69,7 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
         @WritesAttribute(attribute = "azure.etag", description = "Etag for the Azure blob"),
         @WritesAttribute(attribute = "azure.length", description = "Length of the blob"),
         @WritesAttribute(attribute = "azure.timestamp", description = "The timestamp in Azure for the blob")})
-public class PutAzureBlobStorage extends AbstractAzureEncryptedBlobProcessor {
+public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
 
     public static final PropertyDescriptor BLOB_NAME = new PropertyDescriptor.Builder()
             .name("blob")
@@ -90,11 +94,21 @@ public class PutAzureBlobStorage extends AbstractAzureEncryptedBlobProcessor {
             .build();
 
     @Override
+    protected Collection<ValidationResult> customValidate(ValidationContext validationContext) {
+        final List<ValidationResult> results = new ArrayList<>(super.customValidate(validationContext));
+        results.addAll(AzureBlobClientSideEncryptionUtils.validateClientSideEncryptionProperties(validationContext));
+        return results;
+    }
+
+    @Override
     public List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         List<PropertyDescriptor> properties = new ArrayList<>(super.getSupportedPropertyDescriptors());
         properties.remove(BLOB);
         properties.add(BLOB_NAME);
         properties.add(CREATE_CONTAINER);
+        properties.add(AzureBlobClientSideEncryptionUtils.CSE_KEY_TYPE);
+        properties.add(AzureBlobClientSideEncryptionUtils.CSE_KEY_ID);
+        properties.add(AzureBlobClientSideEncryptionUtils.CSE_SYMMETRIC_KEY_HEX);
         return properties;
     }
 
@@ -112,10 +126,10 @@ public class PutAzureBlobStorage extends AbstractAzureEncryptedBlobProcessor {
 
         final boolean createContainer = context.getProperty(CREATE_CONTAINER).asBoolean();
 
-        final String cseKeyTypeValue = context.getProperty(CSE_KEY_TYPE).getValue();
+        final String cseKeyTypeValue = context.getProperty(AzureBlobClientSideEncryptionUtils.CSE_KEY_TYPE).getValue();
         final AzureBlobClientSideEncryptionMethod cseKeyType = AzureBlobClientSideEncryptionMethod.valueOf(cseKeyTypeValue);
 
-        final String cseSymmetricKeyHex = context.getProperty(CSE_SYMMETRIC_KEY_HEX).getValue();
+        final String cseSymmetricKeyHex = context.getProperty(AzureBlobClientSideEncryptionUtils.CSE_SYMMETRIC_KEY_HEX).getValue();
 
         AtomicReference<Exception> storedException = new AtomicReference<>();
         try {
