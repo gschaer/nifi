@@ -31,7 +31,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.microsoft.azure.keyvault.cryptography.SymmetricKey;
 import com.microsoft.azure.storage.OperationContext;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.nifi.annotation.behavior.InputRequirement;
 import org.apache.nifi.annotation.behavior.InputRequirement.Requirement;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
@@ -58,6 +61,8 @@ import com.microsoft.azure.storage.blob.BlobProperties;
 import com.microsoft.azure.storage.blob.CloudBlob;
 import com.microsoft.azure.storage.blob.CloudBlobClient;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
+import com.microsoft.azure.storage.blob.BlobRequestOptions;
+import com.microsoft.azure.storage.blob.BlobEncryptionPolicy;
 
 @Tags({ "azure", "microsoft", "cloud", "storage", "blob" })
 @SeeAlso({ ListAzureBlobStorage.class, FetchAzureBlobStorage.class, DeleteAzureBlobStorage.class })
@@ -129,6 +134,8 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
         final String cseKeyTypeValue = context.getProperty(AzureBlobClientSideEncryptionUtils.CSE_KEY_TYPE).getValue();
         final AzureBlobClientSideEncryptionMethod cseKeyType = AzureBlobClientSideEncryptionMethod.valueOf(cseKeyTypeValue);
 
+        final String cseKeyId = context.getProperty(AzureBlobClientSideEncryptionUtils.CSE_KEY_ID).getValue();
+
         final String cseSymmetricKeyHex = context.getProperty(AzureBlobClientSideEncryptionUtils.CSE_SYMMETRIC_KEY_HEX).getValue();
 
         AtomicReference<Exception> storedException = new AtomicReference<>();
@@ -143,6 +150,15 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
 
             final OperationContext operationContext = new OperationContext();
             AzureStorageUtils.setProxy(operationContext, context);
+
+            BlobRequestOptions blobRequestOptions = new BlobRequestOptions();
+
+            if (cseKeyType == AzureBlobClientSideEncryptionMethod.SYMMETRIC) {
+                byte[] keyBytes = Hex.decodeHex(cseSymmetricKeyHex.toCharArray());
+                SymmetricKey key = new SymmetricKey(cseKeyId, keyBytes);
+                BlobEncryptionPolicy policy = new BlobEncryptionPolicy(key, null);
+                blobRequestOptions.setEncryptionPolicy(policy);
+            }
 
             final Map<String, String> attributes = new HashMap<>();
             long length = flowFile.getSize();
@@ -162,7 +178,7 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
                 }
 
                 try {
-                    uploadBlob(blob, operationContext, in);
+                    uploadBlob(blob, operationContext, blobRequestOptions, in);
                     BlobProperties properties = blob.getProperties();
                     attributes.put("azure.container", containerName);
                     attributes.put("azure.primaryUri", blob.getSnapshotQualifiedUri().toString());
@@ -183,7 +199,7 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
             final long transferMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
             session.getProvenanceReporter().send(flowFile, blob.getSnapshotQualifiedUri().toString(), transferMillis);
 
-        } catch (IllegalArgumentException | URISyntaxException | StorageException | ProcessException e) {
+        } catch (IllegalArgumentException | URISyntaxException | StorageException | ProcessException | DecoderException e) {
             if (e instanceof ProcessException && storedException.get() == null) {
                 throw (ProcessException) e;
             } else {
@@ -197,8 +213,8 @@ public class PutAzureBlobStorage extends AbstractAzureBlobProcessor {
     }
 
     @VisibleForTesting
-    void uploadBlob(CloudBlob blob, OperationContext operationContext, InputStream in) throws StorageException, IOException {
-        blob.upload(in, -1, null, null, operationContext);
+    void uploadBlob(CloudBlob blob, OperationContext operationContext, BlobRequestOptions blobRequestOptions, InputStream in) throws StorageException, IOException {
+        blob.upload(in, -1, null, blobRequestOptions, operationContext);
     }
 
     // Used to help force Azure Blob SDK to write in blocks
