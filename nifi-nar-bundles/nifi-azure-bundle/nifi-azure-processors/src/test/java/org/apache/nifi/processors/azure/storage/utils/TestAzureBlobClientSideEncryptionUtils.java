@@ -58,7 +58,7 @@ public class TestAzureBlobClientSideEncryptionUtils {
 
     @Test
     public void testSymmetricCesNoKeyIdOnProcessor() {
-        configureProcessorProperties("SYMMETRIC", null,"0A0A0A0A0A0A0A0A0A0A0A0A0A0A0A0A");
+        configureProcessorProperties("SYMMETRIC", null, KEY_128B_VALUE);
 
         Collection<ValidationResult> result = AzureBlobClientSideEncryptionUtils.validateClientSideEncryptionProperties(validationContext);
 
