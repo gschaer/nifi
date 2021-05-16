@@ -26,7 +26,8 @@ import org.junit.Test;
 
 import java.util.Collection;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 public class TestAzureBlobClientSideEncryptionUtils {
     private static final String KEY_ID_VALUE = "key:id";
